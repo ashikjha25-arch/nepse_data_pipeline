@@ -1,3 +1,5 @@
+Setting Up the Repository
+
 1. Fork the repo
 
 Go to the repo page → click Fork (creates your copy)
@@ -25,3 +27,18 @@ git push origin your-branch-name
 6. Open a Pull Request
 
 Go to your fork on GitHub → click Compare & pull request → submit for review
+
+Setting Up the Virtual Environment (.venv)
+
+python -m venv .venv
+
+ .\.venv\Scripts\activate 
+
+ (If it throws an error regarding script then do this:
+
+ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+  .\.venv\Scripts\activate 
+ )
+
+ 
