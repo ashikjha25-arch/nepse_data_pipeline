@@ -1,44 +1,58 @@
-Setting Up the Repository
+## NEPSE REAL-TIME DATA PIPELINE
 
-1. Fork the repo
+This project is a containerized, distributed data engineering pipeline designed to transform raw stock market data from the Nepal Stock Exchange (NEPSE) into a continuous, structured stream. 
 
-Go to the repo page → click Fork (creates your copy)
+---
 
-2. Clone to local: Select a folder where you want to store the project, then in the cmd line write each line one-by-one
+## HOW IT WORKS
 
-git clone https://github.com/caster-k/nepse_data_pipeline.git
-cd nepse_data_pipeline
+The system has moved beyond a "run-once" script into a decoupled, streaming architecture. It functions through the following stages:
 
-3. Create a branch: After you are inside nepse folder, again in the cmd, type out the following command
+### 1. Data Ingestion & Batching
+* **Scraper Service**: Continuously fetches live market data.
+* **Batching Logic**: Instead of sending data point-by-point, the system groups data into **1-minute batches**. This ensures the stream is structured and time-consistent.
 
-git checkout -b your-branch-name
+### 2. Streaming Layer (Kafka)
+The project uses **Apache Kafka** to decouple the data source from the data consumer:
+* **Producer**: Receives batched data from the scraper and pushes it to the `nepse-topic`.
+* **Broker**: Managed by **Zookeeper**, it handles the storage and transmission of messages.
+* **Consumer**: An independent service that "listens" to the Kafka topic and processes the data as it arrives.
 
-NOTE: within the cmd type 'git status' and make sure the output mention's the branch name you specified
+### 3. API Layer
+A **FastAPI** service acts as the gateway. It exposes a `/nepse_data` endpoint, allowing external systems or frontends to interact with the pipeline and view the processed data.
 
-4. Make changes + commit: Once you make your changes, add the changes and commit them for review and merge
+### 4. Containerization & Orchestration
+The entire stack is managed by **Docker Compose**, ensuring all services (Kafka, Zookeeper, Producer, Consumer, API) run in an isolated environment with proper networking.
 
-git add .
-git commit -m "Describe your changes"
+---
 
-5. Push branch
 
-git push origin your-branch-name
+## WHAT WE HAVE SO FAR
 
-6. Open a Pull Request
+The foundation of the streaming system is structurally complete and includes:
 
-Go to your fork on GitHub → click Compare & pull request → submit for review
+* **Distributed Architecture**: Separate containers for the Producer and Consumer to simulate a real-world distributed system.
+* **Resilient Networking**: Services communicate via Docker service names (e.g., `kafka:9092`). The system includes **retry logic** to handle Kafka startup delays and prevent `NoBrokersAvailable` errors.
+* **Standardized Execution**: Uses modular Python execution (`python -m app.run_producer`) to ensure consistent file pathing inside containers.
+* **Pipeline Infrastructure**:
+    * **Zookeeper/Kafka**: Core messaging backbone.
+    * **Producer**: Batch-aware data pusher.
+    * **Consumer**: Real-time message receiver.
+    * **FastAPI**: System interface.
 
-Setting Up the Virtual Environment (.venv)
+---
 
-python -m venv .venv
+## TECH STACK
 
- .\.venv\Scripts\activate 
+| Category | Technology |
+| :--- | :--- |
+| **Language** | Python |
+| **Streaming** | Apache Kafka, Zookeeper |
+| **API** | FastAPI |
+| **Infrastructure** | Docker, Docker Compose |
 
- (If it throws an error regarding script then do this:
+## GETTING STARTED
 
- Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-
-  .\.venv\Scripts\activate 
- )
-
- 
+To spin up the entire pipeline, run:
+```bash
+docker-compose up
