@@ -26,6 +26,7 @@ The entire stack is managed by **Docker Compose**, ensuring all services (Kafka,
 
 ---
 
+
 ## WHAT WE HAVE SO FAR
 
 The foundation of the streaming system is structurally complete and includes:
