@@ -2,9 +2,7 @@ import json
 import time
 from kafka import KafkaProducer
 from services.batch_service import run_scrapper
-
-KAFKA_TOPIC = "nepse-topic"
-KAFKA_SERVER = "kafka:9092"
+from app.config.settings import KAFKA_TOPIC, KAFKA_SERVER
 
 def create_producer():
     while True:

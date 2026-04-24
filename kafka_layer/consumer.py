@@ -1,11 +1,8 @@
 import json
 import time
 from kafka import KafkaConsumer
-
-KAFKA_TOPIC = "nepse-topic"
-KAFKA_SERVER = "kafka:9092"
-
-latest_data = {}
+from app.config.settings import KAFKA_TOPIC, KAFKA_SERVER
+from db.db_connection import get_db_connection
 
 def create_consumer():
     while True:
@@ -24,11 +21,15 @@ def create_consumer():
             time.sleep(5)
 
 def start_consumer_loop():
-    global latest_data
     consumer = create_consumer()
+    conn, cur = get_db_connection()
+    latest_data = {}
 
     for message in consumer:
         latest_data['data'] = message.value
-
-def get_latest_data():
-    return latest_data
+        try:
+            cur.execute('INSERT COMMAND FROM REPOSITORY.PY')
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print(f'Exception occurred: {e}')

@@ -1,6 +1,7 @@
 import time
 from nepse_scrapper.nepse_ingestion import fetch_nepse_data
 
+
 def run_scrapper():
     time.sleep(60)
     try:
