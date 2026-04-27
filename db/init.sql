@@ -19,32 +19,32 @@ create table if not exists nepse.securities (
     updated_at timestamp default current_timestamp
 );
 
--- -- 3. raw data table 
--- create table if not exists nepse.daily_trades (
---     id bigserial primary key,
---     symbol text references nepse.securities(symbol),
---     business_date date not null,
---     close_price numeric(12, 2),
---     total_traded_quantity bigint,
---     total_traded_value numeric(20, 2),
---     unique (symbol, business_date)
--- );
+-- 3. raw data table 
+create table if not exists nepse.daily_trades (
+    id bigserial primary key,
+    symbol text references nepse.securities(symbol),
+    business_date date not null,
+    close_price numeric(12, 2),
+    total_traded_quantity bigint,
+    total_traded_value numeric(20, 2),
+    unique (symbol, business_date)
+);
 
--- -- 4. broker master table
--- create table if not exists nepse.brokers (
---     member_code text primary key,
---     member_name text,
---     address text
--- );
+-- 4. broker master table
+create table if not exists nepse.brokers (
+    member_code text primary key,
+    member_name text,
+    address text
+);
 
--- -- 5. calculated data table 
--- create table if not exists nepse.spark_analytics (
---     id serial primary key,
---     symbol text references nepse.securities(symbol),
---     indicator_name text, -- e.g., 'moving_average_7'
---     value numeric(12, 2),
---     calculated_at timestamp default current_timestamp
--- );
+-- 5. calculated data table 
+create table if not exists nepse.spark_analytics (
+    id serial primary key,
+    symbol text references nepse.securities(symbol),
+    indicator_name text, -- e.g., 'moving_average_7'
+    value numeric(12, 2),
+    calculated_at timestamp default current_timestamp
+);
 
--- -- index for grafana query performance
--- create index if not exists idx_trades_view on nepse.daily_trades (business_date desc);
+-- index for grafana query performance
+create index if not exists idx_trades_view on nepse.daily_trades (business_date desc);
