@@ -11,8 +11,9 @@ def create_producer():
                 bootstrap_servers=KAFKA_SERVER,
                 value_serializer=lambda v: json.dumps(v).encode("utf-8")
             )
-            print("Connected to Kafka")
+            print("Connected to Kafka producer")
             return producer
+
         except Exception as e:
             print("Kafka not ready, retrying...", e)
             time.sleep(5)
@@ -23,6 +24,9 @@ def send_to_kafka(data, producer):
 
 def start_producer_loop():
     producer = create_producer()
+
     while True:
-        data = run_scrapper()
-        send_to_kafka(data, producer)
+        messages = run_scrapper()
+        for message in messages:
+            send_to_kafka(message, producer)
+            print(f"Produced to Kafka: {message['data_type']}")

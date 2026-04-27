@@ -1,27 +1,32 @@
 from db.db_connection import get_db_connection
 
-def get_table_counts():
-    # check how many rows are in each table to verify team progress
+def get_market_status():
     conn, cur = get_db_connection()
-    tables = ['market.status_log', 'market.securities', 'market.daily_trades', 'market.brokers', 'market.spark_analytics']
-    results = {}
     try:
-        for table in tables:
-            cur.execute(f"select count(*) from {table};")
-            results[table] = cur.fetchone()[0]
-        return results
-    finally:
-        cur.close(); conn.close()
+        cur.execute("""
+            SELECT is_open
+            FROM nepse.status_log
+            WHERE checked_date = CURRENT_DATE;
+        """)
 
-def inspect_table_data(table_name, limit=10):
-    # peek inside any table to see the raw data
-    conn, cur = get_db_connection()
-    try:
-        cur.execute(f"select * from {table_name} order by 1 desc limit %s;", (limit,))
-        cols = [d[0] for d in cur.description]
-        rows = cur.fetchall()
-        return [dict(zip(cols, row)) for row in rows]
-    except Exception as e:
-        return {"error": str(e)}
+        row = cur.fetchone()
+        return row[0] if row else None
+    except Exception:
+        raise
     finally:
-        cur.close(); conn.close()
+        cur.close()
+        conn.close()
+
+def route_and_insert_data(cur, data_type, payload, fetched_at=None):
+    if data_type == "market_open_status":
+        insert_market_status(cur, payload, fetched_at)
+    else:
+        raise ValueError(f"Unknown data_type: {data_type}")
+
+def insert_market_status(cur, payload, fetched_at):
+    cur.execute("""
+        INSERT INTO nepse.status_log (checked_date, is_open, checked_at)
+        VALUES (CURRENT_DATE, %s, %s)
+        ON CONFLICT (checked_date)
+        DO UPDATE SET is_open = EXCLUDED.is_open;
+    """, (payload, fetched_at))
