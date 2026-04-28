@@ -76,5 +76,20 @@ services:
       --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,org.postgresql:postgresql:42.7.3
       spark_jobs/stream_processor.py"
 
+  grafana:
+    image: grafana/grafana-enterprise:latest
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=volkovlabs-echarts-panel,yesoreyeram-infinity-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - postgres
+
 volumes:
   postgres_data:
+  grafana_data:
