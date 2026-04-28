@@ -19,14 +19,14 @@ services:
     depends_on:
       - kafka
 
-  consumer:
-    build: .
-    container_name: nepse_consumer
-    command: python -m app.run_consumer
-    env_file:
-      - .env
-    depends_on:
-      - kafka
+  # consumer:
+  #   build: .
+  #   container_name: nepse_consumer
+  #   command: python -m app.run_consumer
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     - kafka
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -61,40 +61,20 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
 
-  spark-master:
+  spark:
     image: apache/spark:3.5.1
-    container_name: spark-master
-    command: >
-      /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
-    ports:
-      - "8080:8080"
-      - "7077:7077"
-
-  spark-worker:
-    image: apache/spark:3.5.1
-    container_name: spark-worker
-    depends_on:
-      - spark-master
-    command: >
-      /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
-
-  spark-app:
-    image: apache/spark:3.5.1
-    container_name: spark-app
+    container_name: nepse_spark
+    user: root
     depends_on:
       - kafka
       - postgres
-      - spark-master
     volumes:
-      - ./:/app
+      - .:/app
     working_dir: /app
     command: >
-      /opt/spark/bin/spark-submit
-      --master spark://spark-master:7077
+      bash -c "/opt/spark/bin/spark-submit
       --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,org.postgresql:postgresql:42.7.3
-      spark_jobs/nepse_streaming_job.py
-    env_file:
-      - .env
+      spark_jobs/stream_processor.py"
 
 volumes:
   postgres_data:

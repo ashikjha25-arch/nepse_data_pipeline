@@ -11,7 +11,7 @@ def read_root():
 @app.get("/get/market_status")
 def market_status():
     try:
-        data = get_market_status()
+        data = repo.get_market_status()
         return {
             "success": True,
             "result": data
@@ -26,7 +26,7 @@ def market_status():
 @app.get("/get/company_info")
 def company_info():
     try:
-        data = get_company_info()
+        data = repo.get_company_info()
         return {
             "success": True,
             "result": data
@@ -41,7 +41,7 @@ def company_info():
 @app.get("/get/stock_price")
 def stock_price(symbol: str = None, limit: int = 100):
     try:
-        data = get_stock_price(symbol, limit)
+        data = repo.get_stock_price(symbol, limit)
         return {
             "success": True,
             "result": data
@@ -56,7 +56,7 @@ def stock_price(symbol: str = None, limit: int = 100):
 @app.get("/get/model_pred")
 def model_pred(symbol: str = None, model_name: str = None, limit: int = 100):
     try:
-        data = get_model_pred(symbol, model_name, limit)
+        data = repo.get_model_pred(symbol, model_name, limit)
         return {
             "success": True,
             "result": data
