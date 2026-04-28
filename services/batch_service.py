@@ -109,7 +109,7 @@ def run_history_scrapper(ticker, start_date, end_date):
                 "high_price": item.get("highPrice"), 
                 "low_price": item.get("lowPrice"),
                 "close_price": item.get("closePrice") or item.get("lastTradedPrice"),
-                "volume": item.get("totalTradeQuantity"),
+                "volume": item.get("totalTradedQuantity"),
                 "turnover": item.get("totalTradedValue")
             })
 
