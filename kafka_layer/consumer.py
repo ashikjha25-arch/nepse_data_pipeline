@@ -35,7 +35,7 @@ def start_consumer_loop():
             data = message.value
             data_type = data.get("data_type")
             payload = data.get("payload")
-            fetched_at = data.get("fetched_at")
+            fetched_at = data.get("fetched_at") if data.get("fetched_at") else None
 
             if data_type == "error":
                 print(f"Logged upstream error: {payload}")

@@ -1,202 +1,340 @@
 from db.db_connection import get_db_connection
 
-def ensure_tables_exist():
-    """Manually creates all tables if they don't exist (failsafe for init.sql)."""
-    conn, cur = get_db_connection()
+def route_and_insert_data(cur, data_type, payload, fetched_at = None):
+    if data_type == "stock_price_history":
+        insert_stock_price(cur, payload, fetched_at)
+    elif data_type == "company_info":
+        insert_company_info(cur, payload, fetched_at)
+    elif data_type == "market_open_status":
+        insert_market_status(cur, payload, fetched_at)
+    elif data_type == "stock_forecast":
+        insert_stock_forecast(cur, payload, fetched_at)
+
+def insert_market_status(cur, data, fetched_at):
     try:
-        cur.execute("CREATE SCHEMA IF NOT EXISTS nepse;")
-        
-        # 1. Status Log
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS nepse.status_log (
-                checked_date date PRIMARY KEY DEFAULT CURRENT_DATE,
-                is_open boolean NOT NULL,
-                checked_at timestamp DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
+        is_open = data
 
-        # 2. Securities
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS nepse.securities (
-                symbol text PRIMARY KEY,
-                security_name text,
-                company_name text,
-                updated_at timestamp DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
+            INSERT INTO nepse.status_log (
+                checked_date,
+                is_open,
+                checked_at
+            )
+            VALUES (
+                CURRENT_DATE,
+                %s,
+                %s
+            )
+            ON CONFLICT (checked_date)
+            DO UPDATE SET
+                is_open = EXCLUDED.is_open,
+                checked_at = EXCLUDED.checked_at;
+        """, (is_open, fetched_at))
 
-        # 3. Daily Trades
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS nepse.daily_trades (
-                id bigserial PRIMARY KEY,
-                symbol text REFERENCES nepse.securities(symbol),
-                business_date date NOT NULL,
-                open_price numeric(12, 2),
-                high_price numeric(12, 2),
-                low_price numeric(12, 2),
-                close_price numeric(12, 2),
-                total_traded_quantity bigint,
-                total_traded_value numeric(20, 2),
-                UNIQUE (symbol, business_date)
-            );
-        """)
+    except Exception as e:
+        print(f"Exception occurred in insert_market_status: {e}")
 
-        # 4. Brokers
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS nepse.brokers (
-                member_code text PRIMARY KEY,
-                member_name text,
-                address text
-            );
-        """)
+def insert_stock_price(cur, data, fetched_at):
+    try:
+        # If single dict comes, convert it into list
+        if isinstance(data, dict):
+            data = [data]
 
-        # 5. Spark Analytics
+        for item in data:
+            print(f"Inserting stock price data: {item['symbol']} on {item['business_date']}")
+
+            cur.execute("""
+                INSERT INTO nepse.stock_price_history (
+                    issue_date,
+                    symbol,
+                    open_price,
+                    high_price,
+                    low_price,
+                    close_price,
+                    volume,
+                    turnover
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (issue_date, symbol)
+                DO UPDATE SET
+                    open_price = EXCLUDED.open_price,
+                    high_price = EXCLUDED.high_price,
+                    low_price = EXCLUDED.low_price,
+                    close_price = EXCLUDED.close_price,
+                    volume = EXCLUDED.volume,
+                    turnover = EXCLUDED.turnover;
+            """, (
+                item["business_date"],
+                item["symbol"],
+                item["open_price"],
+                item["high_price"],
+                item["low_price"],
+                item["close_price"],
+                item["volume"],
+                item["turnover"]
+            ))
+
+    except Exception as e:
+        print(f"Exception occurred in insert_stock_price: {e}")
+        raise
+
+def insert_company_info(cur, data, fetched_at):
+    try:
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS nepse.spark_analytics (
-                id serial PRIMARY KEY,
-                symbol text REFERENCES nepse.securities(symbol),
-                indicator_name text,
-                value numeric(12, 2),
-                calculated_at timestamp DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_trades_view ON nepse.daily_trades (business_date DESC);")
-        conn.commit()
-    finally:
-        cur.close()
-        conn.close()
+            INSERT INTO nepse.company_info (
+                symbol,
+                company_name,
+                sector
+            )
+            VALUES (%s, %s, %s)
+            ON CONFLICT (symbol)
+            DO UPDATE SET
+                company_name = EXCLUDED.company_name,
+                sector = EXCLUDED.sector;
+        """, (
+            data.get("symbol"),
+            data.get("company_name"),
+            data.get("sector")  
+        ))
+
+    except Exception as e:
+        print(f"Exception occurred in insert_company_info: {e}")
+
+def insert_stock_forecast(cur, data, fetched_at):
+    try:
+        cur.execute("""
+            INSERT INTO nepse.stock_forecast (
+                forecast_date,
+                symbol,
+                actual_close,
+                predicted_close,
+                model_name
+            )
+            VALUES (
+                CURRENT_DATE,
+                %s,
+                %s,
+                %s,
+                %s
+            )
+            ON CONFLICT (forecast_date, symbol, model_name)
+            DO UPDATE SET
+                actual_close = EXCLUDED.actual_close,
+                predicted_close = EXCLUDED.predicted_close;
+        """, (
+            data.get("symbol"),
+            data.get("actual_close"),
+            data.get("predicted_close"),
+            data.get("model_name")
+        ))
+
+    except Exception as e:
+        print(f"Exception occurred in insert_stock_forecast: {e}")
 
 def get_market_status():
-    """Checks if the market is open for current date."""
     conn, cur = get_db_connection()
+
     try:
         cur.execute("""
-            SELECT is_open FROM nepse.status_log 
-            WHERE checked_date = CURRENT_DATE;
+            SELECT 
+                checked_date,
+                is_open,
+                fetched_at
+            FROM nepse.status_log
+            ORDER BY checked_date DESC
+            LIMIT 1;
         """)
+
         row = cur.fetchone()
-        return row[0] if row else None
+
+        if not row:
+            return None
+
+        return {
+            "checked_date": row[0],
+            "is_open": row[1],
+            "fetched_at": row[2]
+        }
+
+    except Exception as e:
+        print(f"Exception occurred in get_market_status: {e}")
+        return None
+
     finally:
         cur.close()
         conn.close()
 
-def get_table_counts():
-    """Returns row counts for all tables."""
+def get_company_info():
     conn, cur = get_db_connection()
-    tables = ["status_log", "securities", "daily_trades", "brokers", "spark_analytics"]
-    counts = {}
-    try:
-        for table in tables:
-            cur.execute(f"SELECT COUNT(*) FROM nepse.{table};")
-            counts[table] = cur.fetchone()[0]
-        return counts
-    finally:
-        cur.close()
-        conn.close()
 
-def inspect_table_data(table_name, limit=10):
-    """Fetches sample data from specified table."""
-    conn, cur = get_db_connection()
     try:
-        cur.execute(f"SELECT * FROM {table_name} LIMIT %s;", (limit,))
-        colnames = [desc[0] for desc in cur.description]
+        cur.execute("""
+            SELECT 
+                symbol,
+                company_name,
+                sector
+            FROM nepse.company_info
+            ORDER BY symbol ASC;
+        """)
+
         rows = cur.fetchall()
-        return [dict(zip(colnames, row)) for row in rows]
+
+        return [
+            {
+                "symbol": row[0],
+                "company_name": row[1],
+                "sector": row[2]
+            }
+            for row in rows
+        ]
+
+    except Exception as e:
+        print(f"Exception occurred in get_company_info: {e}")
+        return []
+
     finally:
         cur.close()
         conn.close()
 
-def route_and_insert_data(cur, data_type, payload, fetched_at=None):
-    """Routes incoming Kafka payload to specific insert functions."""
-    if data_type == "market_open_status":
-        insert_market_status(cur, payload, fetched_at)
-    elif data_type == "daily_trades":
-        insert_daily_trades(cur, payload)
-    elif data_type == "securities":
-        upsert_securities(cur, payload)
-    elif data_type == "brokers":
-        upsert_brokers(cur, payload)
-    elif data_type == "spark_analytics":
-        insert_spark_analytics(cur, payload)
-    else:
-        print(f"Unknown data_type: {data_type}")
+def get_stock_price(symbol=None, limit=100):
+    conn, cur = get_db_connection()
 
-def insert_market_status(cur, is_open, fetched_at):
-    cur.execute("""
-        INSERT INTO nepse.status_log (checked_date, is_open, checked_at)
-        VALUES (CURRENT_DATE, %s, %s)
-        ON CONFLICT (checked_date)
-        DO UPDATE SET is_open = EXCLUDED.is_open, checked_at = EXCLUDED.checked_at;
-    """, (is_open, fetched_at))
+    try:
+        if symbol:
+            cur.execute("""
+                SELECT 
+                    issue_date,
+                    symbol,
+                    open_price,
+                    high_price,
+                    low_price,
+                    close_price,
+                    volume,
+                    turnover
+                FROM nepse.stock_price_history
+                WHERE symbol = %s
+                ORDER BY issue_date DESC
+                LIMIT %s;
+            """, (symbol, limit))
+        else:
+            cur.execute("""
+                SELECT 
+                    issue_date,
+                    symbol,
+                    open_price,
+                    high_price,
+                    low_price,
+                    close_price,
+                    volume,
+                    turnover
+                FROM nepse.stock_price_history
+                ORDER BY issue_date DESC
+                LIMIT %s;
+            """, (limit,))
 
-def insert_top_stocks(cur, payload):
-    """Inserts a batch of top stocks by category."""
-    category = payload.get('category')
-    stocks = payload.get('data', [])
-    for stock in stocks:
-        cur.execute("""
-            INSERT INTO nepse.top_stocks (category, symbol, ltp, point_change, percentage_change)
-            VALUES (%s, %s, %s, %s, %s);
-        """, (
-            category, 
-            stock.get('symbol'), 
-            stock.get('ltp'), 
-            stock.get('pointChange'), 
-            stock.get('percentageChange')
-        ))
+        rows = cur.fetchall()
 
-def upsert_securities(cur, securities_list):
-    """Upserts metadata for securities (companies)."""
-    for sec in securities_list:
-        cur.execute("""
-            INSERT INTO nepse.securities (symbol, security_name, company_name, updated_at)
-            VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
-            ON CONFLICT (symbol) DO UPDATE SET
-                security_name = EXCLUDED.security_name,
-                company_name = EXCLUDED.company_name,
-                updated_at = CURRENT_TIMESTAMP;
-        """, (sec['symbol'], sec.get('security_name'), sec.get('company_name')))
+        return [
+            {
+                "issue_date": row[0],
+                "symbol": row[1],
+                "open_price": row[2],
+                "high_price": row[3],
+                "low_price": row[4],
+                "close_price": row[5],
+                "volume": row[6],
+                "turnover": row[7]
+            }
+            for row in rows
+        ]
 
-def insert_daily_trades(cur, trades_list):
-    """Inserts daily trade data for provided symbols with OHLCV data."""
-    for trade in trades_list:
-        cur.execute("""
-            INSERT INTO nepse.daily_trades 
-            (symbol, business_date, open_price, high_price, low_price, close_price, total_traded_quantity, total_traded_value)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (symbol, business_date) DO UPDATE SET
-                open_price = EXCLUDED.open_price,
-                high_price = EXCLUDED.high_price,
-                low_price = EXCLUDED.low_price,
-                close_price = EXCLUDED.close_price,
-                total_traded_quantity = EXCLUDED.total_traded_quantity,
-                total_traded_value = EXCLUDED.total_traded_value;
-        """, (
-            trade['symbol'], 
-            trade['business_date'], 
-            trade.get('open_price'),
-            trade.get('high_price'),
-            trade.get('low_price'),
-            trade['close_price'], 
-            trade['total_traded_quantity'], 
-            trade['total_traded_value']
-        ))
+    except Exception as e:
+        print(f"Exception occurred in get_stock_price: {e}")
+        return []
 
-def upsert_brokers(cur, brokers_list):
-    """Upserts broker metadata."""
-    for broker in brokers_list:
-        cur.execute("""
-            INSERT INTO nepse.brokers (member_code, member_name, address)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (member_code) DO UPDATE SET
-                member_name = EXCLUDED.member_name,
-                address = EXCLUDED.address;
-        """, (broker['member_code'], broker.get('member_name'), broker.get('address')))
+    finally:
+        cur.close()
+        conn.close()
 
-def insert_spark_analytics(cur, metrics):
-    """Stores calculated results from Spark."""
-    cur.execute("""
-        INSERT INTO nepse.spark_analytics (symbol, indicator_name, value, calculated_at)
-        VALUES (%s, %s, %s, CURRENT_TIMESTAMP);
-    """, (metrics['symbol'], metrics['indicator'], metrics['value']))
+def get_model_pred(symbol=None, model_name=None, limit=100):
+    conn, cur = get_db_connection()
+
+    try:
+        query = """
+            SELECT 
+                forecast_date,
+                symbol,
+                actual_close,
+                predicted_close,
+                model_name
+            FROM nepse.stock_forecast
+            WHERE 1=1
+        """
+
+        params = []
+
+        if symbol:
+            query += " AND symbol = %s"
+            params.append(symbol)
+
+        if model_name:
+            query += " AND model_name = %s"
+            params.append(model_name)
+
+        query += """
+            ORDER BY forecast_date DESC
+            LIMIT %s;
+        """
+        params.append(limit)
+
+        cur.execute(query, tuple(params))
+
+        rows = cur.fetchall()
+
+        return [
+            {
+                "forecast_date": row[0],
+                "symbol": row[1],
+                "actual_close": row[2],
+                "predicted_close": row[3],
+                "model_name": row[4]
+            }
+            for row in rows
+        ]
+
+    except Exception as e:
+        print(f"Exception occurred in get_model_pred: {e}")
+        return []
+
+    finally:
+        cur.close()
+        conn.close()
+
+def store_prev_data(messages):
+    conn, cur = get_db_connection()
+    try:
+        for message in messages:
+            if message['data_type'] == "stock_price_history":
+                insert_stock_price(
+                    cur, 
+                    message['payload'], 
+                    message['fetched_at']
+                )
+            elif message['data_type'] == "company_info":
+                insert_company_info(
+                    cur, 
+                    message['payload'], 
+                    message['fetched_at']
+                )
+        conn.commit()  # Commit after each stock price insert to ensure data is saved
+        print('Previous data stored successfully in the database.')
+    except Exception as e:
+        conn.rollback()  # Rollback in case of any error to maintain data integrity
+        print(f"Exception occurred while storing previous data: {e}")
+        raise
+    finally:
+        cur.close()
+        conn.close()
+
+
+

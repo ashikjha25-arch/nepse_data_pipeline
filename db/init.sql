@@ -1,7 +1,7 @@
 -- create schema for isolation
 create schema if not exists nepse;
 
--- 1. for operational tracking (is nepse open history)
+-- Status Log (check if market is open or closed)
 CREATE TABLE IF NOT EXISTS nepse.status_log (
     checked_date date PRIMARY KEY DEFAULT CURRENT_DATE,
     is_open boolean NOT NULL,
@@ -11,40 +11,39 @@ CREATE TABLE IF NOT EXISTS nepse.status_log (
 ALTER TABLE nepse.status_log
 ADD CONSTRAINT status_log_checked_date_unique UNIQUE (checked_date);
 
--- 2. master table (target for kafka/spark dimension loading)
-create table if not exists nepse.securities (
-    symbol text primary key,
-    security_name text,
-    company_name text,
-    updated_at timestamp default current_timestamp
+-- Stock Price History
+CREATE TABLE IF NOT EXISTS nepse.stock_price_history (
+    stock_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    issue_date DATE DEFAULT CURRENT_DATE,
+    symbol VARCHAR(10),
+    open_price NUMERIC(12, 2),
+    high_price NUMERIC(12, 2),
+    low_price NUMERIC(12, 2),
+    close_price NUMERIC(12, 2),
+    volume INT,
+    turnover NUMERIC(12, 2)
 );
 
--- 3. raw data table 
-create table if not exists nepse.daily_trades (
-    id bigserial primary key,
-    symbol text references nepse.securities(symbol),
-    business_date date not null,
-    close_price numeric(12, 2),
-    total_traded_quantity bigint,
-    total_traded_value numeric(20, 2),
-    unique (symbol, business_date)
+
+ALTER TABLE nepse.stock_price_history
+ADD CONSTRAINT unique_stock_date_symbol UNIQUE (issue_date, symbol);
+
+-- Company Information
+create table if not exists nepse.company_info (
+    symbol varchar(10) PRIMARY KEY,
+    company_name text NOT NULL,
+    sector text
 );
 
--- 4. broker master table
-create table if not exists nepse.brokers (
-    member_code text primary key,
-    member_name text,
-    address text
+-- Stock Forecast (for models)
+CREATE TABLE IF NOT EXISTS nepse.stock_forecast (
+    pred_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    forecast_date DATE DEFAULT CURRENT_DATE,
+    symbol VARCHAR(10),
+    actual_close NUMERIC(12, 2),
+    predicted_close NUMERIC(12, 2),
+    model_name VARCHAR(50)
 );
 
--- 5. calculated data table 
-create table if not exists nepse.spark_analytics (
-    id serial primary key,
-    symbol text references nepse.securities(symbol),
-    indicator_name text, -- e.g., 'moving_average_7'
-    value numeric(12, 2),
-    calculated_at timestamp default current_timestamp
-);
 
--- index for grafana query performance
-create index if not exists idx_trades_view on nepse.daily_trades (business_date desc);
+
