@@ -1,8 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from db import repository as repo
-
-# Ensure DB schema is ready on startup
-repo.ensure_tables_exist()
+from services.batch_service import run_history_scrapper
 
 app = FastAPI(title="NEPSE Market Data API")
 
@@ -10,48 +8,73 @@ app = FastAPI(title="NEPSE Market Data API")
 def read_root():
     return {"message": "NEPSE Market Data API is running"}
 
-@app.get("/market/status")
-def get_market_status():
-    """Returns whether the market is currently open."""
-    status = repo.get_market_status()
-    return {"status": "open" if status else "closed", "raw": status}
-
-@app.get("/inspect/stats")
-def table_statistics():
-    """Summary of data volume across all tables."""
+@app.get("/get/market_status")
+def market_status():
     try:
-        counts = repo.get_table_counts()
-        return {"status": "success", "counts": counts}
+        data = get_market_status()
+        return {
+            "success": True,
+            "result": data
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Exception occurred in /market_status: {e}")
+        return {
+            "success": False,
+            "result": "Exception occurred, please try again"
+        }
 
-@app.get("/inspect/trades")
-def preview_trades(limit: int = 10):
-    """View recent trade data."""
-    data = repo.inspect_table_data("nepse.daily_trades", limit)
-    return {"data": data}
+@app.get("/get/company_info")
+def company_info():
+    try:
+        data = get_company_info()
+        return {
+            "success": True,
+            "result": data
+        }
+    except Exception as e:
+        print(f"Exception occurred in /company_info: {e}")
+        return {
+            "success": False,
+            "result": "Exception occurred, please try again"
+        }
 
-@app.get("/inspect/securities")
-def preview_securities(limit: int = 50):
-    """View list of registered companies/securities."""
-    data = repo.inspect_table_data("nepse.securities", limit)
-    return {"data": data}
+@app.get("/get/stock_price")
+def stock_price(symbol: str = None, limit: int = 100):
+    try:
+        data = get_stock_price(symbol, limit)
+        return {
+            "success": True,
+            "result": data
+        }
+    except Exception as e:
+        print(f"Exception occurred in /stock_price: {e}")
+        return {
+            "success": False,
+            "result": "Exception occurred, please try again"
+        }
 
-@app.get("/inspect/price_history")
-def preview_price_history(symbol: str, limit: int = 20):
-    """View recent price history for a specific symbol."""
-    data = repo.inspect_price_history(symbol, limit)
-    return {"data": data}
+@app.get("/get/model_pred")
+def model_pred(symbol: str = None, model_name: str = None, limit: int = 100):
+    try:
+        data = get_model_pred(symbol, model_name, limit)
+        return {
+            "success": True,
+            "result": data
+        }
+    except Exception as e:
+        print(f"Exception occurred in /model_pred: {e}")
+        return {
+            "success": False,
+            "result": "Exception occurred, please try again"
+        }
 
-@app.get("/inspect/top_stocks")
-def preview_top_stocks(limit: int = 20):
-    """View recent snapshots of top performers."""
-    data = repo.inspect_table_data("nepse.top_stocks", limit)
-    return {"data": data}
+@app.get("/store/prev_data")
+def store_prev_data():
+    symbols = ["HBLD86", "SHINED", "SBD89", "RMF1", "ICFCD88", "SBID89", "NABILD2089", "GIBF1", "SBID2090", "CMF2", "CBLD88"]
+    for symbol in symbols:
+        result = run_history_scrapper(symbol, start_date='2026-04-26', end_date='2026-04-27')
+        print(f'Stored for {symbol}: {result}')
+    
+    return {'status': "Check logs"}
 
-@app.get("/inspect/spark")
-def preview_spark_results(limit: int = 20):
-    """Fetch recent analytics from Spark computations."""
-    data = repo.inspect_table_data("nepse.spark_analytics", limit)
-    return {"data": data}
 
