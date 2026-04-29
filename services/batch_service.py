@@ -23,6 +23,7 @@ def run_scrapper():
         # We always check for prices because the list of listed companies 
         # (securites) is essentially discovered here.
         price_data = nepse_ingestion.fetch_today_prices()
+        
         symbols = []
         if price_data:
             # Map for daily_trades table
@@ -59,14 +60,27 @@ def run_scrapper():
         # fetch company info
         for symbol in symbols:
             company_data = nepse_ingestion.fetch_ticker_info(symbol)
+        
             if company_data:
+                # If response is wrapped like {"nabil_info": {...}}, unwrap it
+                if len(company_data) == 1 and isinstance(next(iter(company_data.values())), dict):
+                    company_data = next(iter(company_data.values()))
+        
+                security = company_data.get("security", {})
+                company = security.get("companyId", {})
+                sector_master = company.get("sectorMaster", {})
+        
+                company_name = company.get("companyName")
+                sector = sector_master.get("sectorDescription", "Unknown")
+        
                 messages.append({
                     "data_type": "company_info",
                     "payload": {
-                        "symbol": symbol, 
-                        "company_name": company_data['companyId']['companyName'],
-                        "sector": company_data['companyId']['sectorMaster']['sectorDescription']
+                        "symbol": symbol,
+                        "company_name": company_name,
+                        "sector": sector
                     },
+                    "fetched_at": fetched_at
                 })
 
     except Exception as e:
@@ -78,9 +92,8 @@ def run_scrapper():
 
     return messages
 
-fetched_at = datetime.utcnow().isoformat()
-
 def run_history_scrapper(ticker, start_date, end_date):
+    fetched_at = datetime.utcnow().isoformat()
     messages = []
 
     try:
@@ -93,54 +106,51 @@ def run_history_scrapper(ticker, start_date, end_date):
         records = history.get("content", [])
 
         trades = []
+        company_info_added = False
 
         for item in records:
             company = item.get("security", {}).get("companyId", {})
-            sectorMaster = company.get("sectorMaster", {})
-            sector = sectorMaster.get("sectorDescription", "Unknown")
+            sector_master = company.get("sectorMaster", {})
+            sector = sector_master.get("sectorDescription", "Unknown")
 
             symbol = ticker
 
-            # stock price
             trades.append({
                 "business_date": item.get("businessDate"),
                 "symbol": symbol,
                 "open_price": item.get("openPrice"),
-                "high_price": item.get("highPrice"), 
+                "high_price": item.get("highPrice"),
                 "low_price": item.get("lowPrice"),
                 "close_price": item.get("closePrice") or item.get("lastTradedPrice"),
                 "volume": item.get("totalTradedQuantity"),
                 "turnover": item.get("totalTradedValue")
             })
 
-            # company info append
+            if not company_info_added:
+                messages.append({
+                    "data_type": "company_info",
+                    "payload": {
+                        "symbol": symbol,
+                        "company_name": company.get("companyName"),
+                        "sector": sector
+                    },
+                    "fetched_at": fetched_at
+                })
+                company_info_added = True
+
+        if trades:
             messages.append({
-                "data_type": "company_info",
-                "payload": {
-                    "symbol": symbol,
-                    "company_name": company.get("companyName"),
-                    "sector": sector
-                },
+                "data_type": "stock_price_history",
+                "payload": trades,
                 "fetched_at": fetched_at
             })
-        # stock price history append
-        messages.append({
-            "data_type": "stock_price_history",
-            "payload": trades,
-            "fetched_at": fetched_at
-        })
 
     except Exception as e:
         messages.append({
             "data_type": "error",
             "payload": {"exception": str(e)},
             "fetched_at": fetched_at
-        }) 
+        })
 
-    try:
-        store_prev_data(messages)
-        return True
-    except Exception as e:
-        print(f'Exception occurred while storing prev data: {e}')
-        return False
+    return messages
 

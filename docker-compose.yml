@@ -13,11 +13,14 @@ services:
   producer:
     build: .
     container_name: nepse_producer
+    depends_on:
+      prev_data_loader:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_started
     command: python -m app.run_producer
     env_file:
       - .env
-    depends_on:
-      - kafka
 
   # consumer:
   #   build: .
@@ -47,8 +50,23 @@ services:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - kafka
+    command: >
+      bash -c "
+      sleep 15 &&
+      /usr/bin/kafka-topics --bootstrap-server kafka:9092
+      --create --if-not-exists
+      --topic nepse-topic
+      --partitions 1
+      --replication-factor 1
+      "
 
   postgres:
     image: postgres:16
@@ -66,7 +84,7 @@ services:
     container_name: nepse_spark
     user: root
     depends_on:
-      - kafka
+      - kafka-init
       - postgres
     volumes:
       - .:/app
@@ -89,6 +107,33 @@ services:
       - grafana_data:/var/lib/grafana
     depends_on:
       - postgres
+
+  ml_service:
+    build:
+      context: .
+      dockerfile: Dockerfile.ml
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - postgres
+    restart: always
+
+  prev_data_loader:
+    image: curlimages/curl:latest
+    container_name: nepse_prev_data_loader
+    depends_on:
+      - api
+      - spark
+      - kafka
+    command: >
+      sh -c "
+      sleep 20 &&
+      curl -f http://api:8000/store/prev_data &&
+      echo 'Previous data loaded successfully'
+      "
+    restart: "no"
 
 volumes:
   postgres_data:

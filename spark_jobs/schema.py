@@ -3,6 +3,7 @@ from pyspark.sql.types import (
     DoubleType, IntegerType
 )
 
+
 stock_payload_schema = StructType([
     StructField("business_date", StringType(), True),
     StructField("symbol", StringType(), True),
@@ -14,9 +15,9 @@ stock_payload_schema = StructType([
     StructField("turnover", DoubleType(), True)
 ])
 
-kafka_message_schema = StructType([
-    StructField("data_type", StringType(), True),
-    StructField("payload", stock_payload_schema, True),
-    StructField("fetched_at", StringType(), True)
-])
 
+company_info_schema = StructType([
+    StructField("symbol", StringType(), True),
+    StructField("company_name", StringType(), True),
+    StructField("sector", StringType(), True)
+])

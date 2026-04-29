@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from db import repository as repo
 from services.batch_service import run_history_scrapper
+from services.kafka_service import send_messages_to_kafka
 
 app = FastAPI(title="NEPSE Market Data API")
 
@@ -70,11 +71,30 @@ def model_pred(symbol: str = None, model_name: str = None, limit: int = 100):
 
 @app.get("/store/prev_data")
 def store_prev_data():
-    symbols = ["HBLD86", "SHINED", "SBD89", "RMF1", "ICFCD88", "SBID89", "NABILD2089", "GIBF1", "SBID2090", "CMF2", "CBLD88"]
+    symbols = [
+        "HBLD86", "SHINED", "SBD89", "RMF1", "ICFCD88",
+        "SBID89", "NABILD2089", "GIBF1", "SBID2090", "CMF2", "CBLD88"
+    ]
+
+    total_messages = 0
+
     for symbol in symbols:
-        result = run_history_scrapper(symbol, start_date='2026-04-26', end_date='2026-04-27')
-        print(f'Stored for {symbol}: {result}')
-    
-    return {'status': "Check logs"}
+        messages = run_history_scrapper(
+            symbol,
+            start_date="2026-04-26",
+            end_date="2026-04-27"
+        )
+
+        if messages:
+            send_messages_to_kafka(messages)
+            total_messages += len(messages)
+
+        print(f"Sent previous data for {symbol} to Kafka")
+
+    return {
+        "status": "Previous data sent to Kafka. Spark will process and store it.",
+        "symbols_processed": len(symbols),
+        "messages_sent": total_messages
+    }
 
 
