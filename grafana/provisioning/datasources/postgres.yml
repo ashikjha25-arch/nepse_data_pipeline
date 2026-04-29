@@ -1,0 +1,18 @@
+apiVersion: 1
+
+datasources:
+  - name: NEPSE-Postgres
+    type: postgres
+    uid: nepse-postgres
+    url: postgres:5432
+    user: postgres
+    database: nepse_db          # keep this
+    secureJsonData:
+      password: postgres
+    jsonData:
+      sslmode: 'disable'
+      postgresVersion: 1600
+      timescaledb: false
+      database: nepse_db        # ADD THIS — Grafana reads from here
+    isDefault: true
+    editable: true

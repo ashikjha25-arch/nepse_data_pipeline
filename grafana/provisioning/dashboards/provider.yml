@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: 'nepse-dashboards'
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    options:
+      # This matches the path we created in the docker-compose volumes
+      path: /var/lib/grafana/dashboards
