@@ -2,7 +2,7 @@
   "title": "NEPSE Technical Analysis Pro",
   "uid": "nepse-technical-pro",
   "schemaVersion": 39,
-  "version": 15,
+  "version": 20,
   "refresh": "10s",
   "time": {
     "from": "2026-04-01T00:00:00Z",
@@ -24,7 +24,7 @@
   "panels": [
     {
       "id": 1,
-      "title": "1. Candlestick Chart (OHLC) + Volume Overlay",
+      "title": "Candlestick Chart (OHLC) + Volume Overlay",
       "type": "candlestick",
       "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 },
       "datasource": { "type": "postgres", "uid": "nepse-postgres" },
@@ -52,7 +52,7 @@
     },
     {
       "id": 2,
-      "title": "2. SMA (20) / EMA (50) + 5. Bollinger Bands (9. Ichimoku)",
+      "title": "Moving Averages & Bollinger Bands",
       "type": "timeseries",
       "gridPos": { "h": 9, "w": 24, "x": 0, "y": 12 },
       "datasource": { "type": "postgres", "uid": "nepse-postgres" },
@@ -75,9 +75,23 @@
     },
     {
       "id": 3,
-      "title": "3. RSI (14-Day Oscillator)",
+      "title": "Ichimoku Cloud Components (Tenkan-sen & Kijun-sen)",
       "type": "timeseries",
       "gridPos": { "h": 7, "w": 12, "x": 0, "y": 21 },
+      "datasource": { "type": "postgres", "uid": "nepse-postgres" },
+      "targets": [
+        {
+          "refId": "Ichimoku",
+          "format": "table",
+          "rawSql": "WITH ranges AS (SELECT issue_date, MAX(high_price) OVER(ORDER BY issue_date ROWS 8 PRECEDING) as h9, MIN(low_price) OVER(ORDER BY issue_date ROWS 8 PRECEDING) as l9, MAX(high_price) OVER(ORDER BY issue_date ROWS 25 PRECEDING) as h26, MIN(low_price) OVER(ORDER BY issue_date ROWS 25 PRECEDING) as l26 FROM nepse.stock_price_history WHERE symbol = '$symbol' AND issue_date >= '2025-01-01') SELECT issue_date as time, (h9 + l9)/2 as tenkan_sen, (h26 + l26)/2 as kijun_sen FROM ranges ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Relative Strength Index (RSI)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 21 },
       "datasource": { "type": "postgres", "uid": "nepse-postgres" },
       "fieldConfig": {
         "defaults": {
@@ -95,10 +109,10 @@
       ]
     },
     {
-      "id": 4,
-      "title": "4. MACD Indicator",
+      "id": 5,
+      "title": "MACD Trend Oscillator",
       "type": "timeseries",
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 21 },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 28 },
       "datasource": { "type": "postgres", "uid": "nepse-postgres" },
       "targets": [
         {
@@ -109,10 +123,24 @@
       ]
     },
     {
-      "id": 5,
-      "title": "6. On-Balance Volume (OBV) & 8. ATR",
+      "id": 6,
+      "title": "Stochastic Oscillator (%K / %D)",
       "type": "timeseries",
-      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 28 },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 28 },
+      "datasource": { "type": "postgres", "uid": "nepse-postgres" },
+      "targets": [
+        {
+          "refId": "Stoch",
+          "format": "table",
+          "rawSql": "WITH ranges AS (SELECT issue_date, close_price, MIN(low_price) OVER(ORDER BY issue_date ROWS 13 PRECEDING) as low_14, MAX(high_price) OVER(ORDER BY issue_date ROWS 13 PRECEDING) as high_14 FROM nepse.stock_price_history WHERE symbol = '$symbol' AND issue_date >= '2025-01-01'), k_line AS (SELECT issue_date, 100 * (close_price - low_14) / NULLIF((high_14 - low_14), 0) as pk FROM ranges) SELECT issue_date as time, pk as percent_k, AVG(pk) OVER(ORDER BY issue_date ROWS 2 PRECEDING) as percent_d FROM k_line ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "On-Balance Volume (OBV)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 35 },
       "datasource": { "type": "postgres", "uid": "nepse-postgres" },
       "targets": [
         {
@@ -124,9 +152,9 @@
     },
     {
       "id": 8,
-      "title": "10. Price-by-Volume (Horizontal Profile)",
+      "title": "Price-by-Volume Profile",
       "type": "barchart",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 35 },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 35 },
       "datasource": { "type": "postgres", "uid": "nepse-postgres" },
       "options": { "orientation": "horizontal" },
       "targets": [
@@ -139,23 +167,23 @@
     },
     {
       "id": 9,
-      "title": "11. Forecast vs Actual",
+      "title": "Average True Range (ATR)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 35 },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 42 },
       "datasource": { "type": "postgres", "uid": "nepse-postgres" },
       "targets": [
         {
-          "refId": "Forecast",
+          "refId": "ATR",
           "format": "table",
-          "rawSql": "SELECT forecast_date as time, actual_close, predicted_close FROM nepse.stock_forecast WHERE symbol = '$symbol' AND forecast_date >= '2025-01-01' ORDER BY 1"
+          "rawSql": "WITH tr AS (SELECT issue_date, GREATEST(high_price - low_price, ABS(high_price - LAG(close_price) OVER (ORDER BY issue_date)), ABS(low_price - LAG(close_price) OVER (ORDER BY issue_date))) as true_range FROM nepse.stock_price_history WHERE symbol = '$symbol' AND issue_date >= '2025-01-01') SELECT issue_date as time, AVG(true_range) OVER(ORDER BY issue_date ROWS 13 PRECEDING) as atr FROM tr ORDER BY 1"
         }
       ]
     },
     {
       "id": 10,
-      "title": "12. Sector Performance (Latest Day)",
+      "title": "Sector Performance Analysis",
       "type": "barchart",
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 43 },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 42 },
       "datasource": { "type": "postgres", "uid": "nepse-postgres" },
       "targets": [
         {
