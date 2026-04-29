@@ -1,0 +1,169 @@
+{
+  "title": "NEPSE Technical Analysis Pro",
+  "uid": "nepse-technical-pro",
+  "schemaVersion": 39,
+  "version": 15,
+  "refresh": "10s",
+  "time": {
+    "from": "2026-04-01T00:00:00Z",
+    "to": "2026-05-01T00:00:00Z"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "symbol",
+        "label": "Stock Symbol",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "nepse-postgres" },
+        "definition": "SELECT DISTINCT symbol FROM nepse.stock_price_history WHERE issue_date >= '2025-01-01' ORDER BY symbol",
+        "query": "SELECT DISTINCT symbol FROM nepse.stock_price_history WHERE issue_date >= '2025-01-01' ORDER BY symbol",
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "1. Candlestick Chart (OHLC) + Volume Overlay",
+      "type": "candlestick",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "nepse-postgres" },
+      "options": {
+        "mode": "both",
+        "candleStyle": "candles",
+        "colorStrategy": "open-close",
+        "upColor": "#00ff00",
+        "downColor": "#ff0000",
+        "open": "open",
+        "high": "high",
+        "low": "low",
+        "close": "close",
+        "volume": "volume",
+        "includeVolume": true,
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["last", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT issue_date AS time, open_price AS open, high_price AS high, low_price AS low, close_price AS close, volume FROM nepse.stock_price_history WHERE symbol = '$symbol' AND issue_date >= '2025-01-01' ORDER BY 1 ASC"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "2. SMA (20) / EMA (50) + 5. Bollinger Bands (9. Ichimoku)",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "postgres", "uid": "nepse-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "close_price" }, "properties": [ { "id": "custom.lineWidth", "value": 2 }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "white" } } ] },
+          { "matcher": { "id": "byName", "options": "bol_lower" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "rgba(31, 120, 193, 0.3)" } }, { "id": "custom.fillBelowTo", "value": "bol_upper" }, { "id": "custom.fillOpacity", "value": 15 }, { "id": "custom.lineStyle", "value": { "dash": [5, 5] } } ] }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "B",
+          "format": "table",
+          "rawSql": "SELECT issue_date AS time, close_price, AVG(close_price) OVER(ORDER BY issue_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) as sma_20, AVG(close_price) OVER(ORDER BY issue_date ROWS BETWEEN 49 PRECEDING AND CURRENT ROW) as ema_50, AVG(close_price) OVER(ORDER BY issue_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) + (2 * STDDEV(close_price) OVER(ORDER BY issue_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW)) as bol_upper, AVG(close_price) OVER(ORDER BY issue_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) - (2 * STDDEV(close_price) OVER(ORDER BY issue_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW)) as bol_lower FROM nepse.stock_price_history WHERE symbol = '$symbol' AND issue_date >= '2025-01-01' ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "3. RSI (14-Day Oscillator)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 21 },
+      "datasource": { "type": "postgres", "uid": "nepse-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0, "max": 100,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 30 }, { "color": "red", "value": 70 }] },
+          "custom": { "thresholdsStyle": { "mode": "dashed+area" }, "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "refId": "RSI",
+          "format": "table",
+          "rawSql": "WITH changes AS (SELECT issue_date, close_price - LAG(close_price) OVER (ORDER BY issue_date) as change FROM nepse.stock_price_history WHERE symbol = '$symbol' AND issue_date >= '2025-01-01'), gains AS (SELECT issue_date, CASE WHEN change > 0 THEN change ELSE 0 END as gain, CASE WHEN change < 0 THEN ABS(change) ELSE 0 END as loss FROM changes), avg_gains AS (SELECT issue_date, AVG(gain) OVER (ORDER BY issue_date ROWS 13 PRECEDING) as avg_gain, AVG(loss) OVER (ORDER BY issue_date ROWS 13 PRECEDING) as avg_loss FROM gains) SELECT issue_date as time, 100 - (100 / (1 + (avg_gain / NULLIF(avg_loss, 0)))) as rsi FROM avg_gains ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "4. MACD Indicator",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 21 },
+      "datasource": { "type": "postgres", "uid": "nepse-postgres" },
+      "targets": [
+        {
+          "refId": "MACD",
+          "format": "table",
+          "rawSql": "WITH ema AS (SELECT issue_date, AVG(close_price) OVER(ORDER BY issue_date ROWS 11 PRECEDING) as ema12, AVG(close_price) OVER(ORDER BY issue_date ROWS 25 PRECEDING) as ema26 FROM nepse.stock_price_history WHERE symbol = '$symbol' AND issue_date >= '2025-01-01'), macd_line AS (SELECT issue_date, ema12 - ema26 as macd FROM ema) SELECT issue_date as time, macd, AVG(macd) OVER(ORDER BY issue_date ROWS 8 PRECEDING) as signal FROM macd_line ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "6. On-Balance Volume (OBV) & 8. ATR",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 28 },
+      "datasource": { "type": "postgres", "uid": "nepse-postgres" },
+      "targets": [
+        {
+          "refId": "OBV",
+          "format": "table",
+          "rawSql": "WITH obv_calc AS (SELECT issue_date, volume, close_price, LAG(close_price) OVER (ORDER BY issue_date) as prev_close FROM nepse.stock_price_history WHERE symbol = '$symbol' AND issue_date >= '2025-01-01') SELECT issue_date as time, SUM(CASE WHEN close_price > prev_close THEN volume WHEN close_price < prev_close THEN -volume ELSE 0 END) OVER (ORDER BY issue_date) as obv FROM obv_calc ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "10. Price-by-Volume (Horizontal Profile)",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 35 },
+      "datasource": { "type": "postgres", "uid": "nepse-postgres" },
+      "options": { "orientation": "horizontal" },
+      "targets": [
+        {
+          "refId": "PBV",
+          "format": "table",
+          "rawSql": "SELECT CAST(ROUND(close_price/10)*10 AS TEXT) as price_bin, SUM(volume) as vol FROM nepse.stock_price_history WHERE symbol = '$symbol' AND issue_date >= '2025-01-01' GROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "11. Forecast vs Actual",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 35 },
+      "datasource": { "type": "postgres", "uid": "nepse-postgres" },
+      "targets": [
+        {
+          "refId": "Forecast",
+          "format": "table",
+          "rawSql": "SELECT forecast_date as time, actual_close, predicted_close FROM nepse.stock_forecast WHERE symbol = '$symbol' AND forecast_date >= '2025-01-01' ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "12. Sector Performance (Latest Day)",
+      "type": "barchart",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 43 },
+      "datasource": { "type": "postgres", "uid": "nepse-postgres" },
+      "targets": [
+        {
+          "refId": "Sector",
+          "format": "table",
+          "rawSql": "SELECT c.sector, AVG((s.close_price - s.open_price)/NULLIF(s.open_price,0))*100 as performance FROM nepse.stock_price_history s JOIN nepse.company_info c ON s.symbol = c.symbol WHERE s.issue_date >= '2025-01-01' GROUP BY 1 ORDER BY 2 DESC"
+        }
+      ]
+    }
+  ]
+}
