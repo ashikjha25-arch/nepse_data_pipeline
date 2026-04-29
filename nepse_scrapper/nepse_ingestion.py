@@ -15,3 +15,11 @@ def fetch_today_prices():
         print(f"Error fetching prices: {e}")
         return []
 
+def fetch_ticker_info(symbol):
+    """Fetches company's info."""
+    try:
+        return scraper.get_ticker_info(symbol)
+    except Exception as e:
+        print(f"Error fetching prices: {e}")
+        return []
+
