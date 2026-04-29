@@ -2,7 +2,7 @@
   "title": "NEPSE Technical Analysis Pro",
   "uid": "nepse-technical-pro",
   "schemaVersion": 39,
-  "version": 20,
+  "version": 21,
   "refresh": "10s",
   "time": {
     "from": "2026-04-01T00:00:00Z",
@@ -75,23 +75,9 @@
     },
     {
       "id": 3,
-      "title": "Ichimoku Cloud Components (Tenkan-sen & Kijun-sen)",
-      "type": "timeseries",
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 21 },
-      "datasource": { "type": "postgres", "uid": "nepse-postgres" },
-      "targets": [
-        {
-          "refId": "Ichimoku",
-          "format": "table",
-          "rawSql": "WITH ranges AS (SELECT issue_date, MAX(high_price) OVER(ORDER BY issue_date ROWS 8 PRECEDING) as h9, MIN(low_price) OVER(ORDER BY issue_date ROWS 8 PRECEDING) as l9, MAX(high_price) OVER(ORDER BY issue_date ROWS 25 PRECEDING) as h26, MIN(low_price) OVER(ORDER BY issue_date ROWS 25 PRECEDING) as l26 FROM nepse.stock_price_history WHERE symbol = '$symbol' AND issue_date >= '2025-01-01') SELECT issue_date as time, (h9 + l9)/2 as tenkan_sen, (h26 + l26)/2 as kijun_sen FROM ranges ORDER BY 1"
-        }
-      ]
-    },
-    {
-      "id": 4,
       "title": "Relative Strength Index (RSI)",
       "type": "timeseries",
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 21 },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 21 },
       "datasource": { "type": "postgres", "uid": "nepse-postgres" },
       "fieldConfig": {
         "defaults": {
@@ -109,16 +95,30 @@
       ]
     },
     {
-      "id": 5,
+      "id": 4,
       "title": "MACD Trend Oscillator",
       "type": "timeseries",
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 28 },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 21 },
       "datasource": { "type": "postgres", "uid": "nepse-postgres" },
       "targets": [
         {
           "refId": "MACD",
           "format": "table",
           "rawSql": "WITH ema AS (SELECT issue_date, AVG(close_price) OVER(ORDER BY issue_date ROWS 11 PRECEDING) as ema12, AVG(close_price) OVER(ORDER BY issue_date ROWS 25 PRECEDING) as ema26 FROM nepse.stock_price_history WHERE symbol = '$symbol' AND issue_date >= '2025-01-01'), macd_line AS (SELECT issue_date, ema12 - ema26 as macd FROM ema) SELECT issue_date as time, macd, AVG(macd) OVER(ORDER BY issue_date ROWS 8 PRECEDING) as signal FROM macd_line ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "On-Balance Volume (OBV)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 28 },
+      "datasource": { "type": "postgres", "uid": "nepse-postgres" },
+      "targets": [
+        {
+          "refId": "OBV",
+          "format": "table",
+          "rawSql": "WITH obv_calc AS (SELECT issue_date, volume, close_price, LAG(close_price) OVER (ORDER BY issue_date) as prev_close FROM nepse.stock_price_history WHERE symbol = '$symbol' AND issue_date >= '2025-01-01') SELECT issue_date as time, SUM(CASE WHEN close_price > prev_close THEN volume WHEN close_price < prev_close THEN -volume ELSE 0 END) OVER (ORDER BY issue_date) as obv FROM obv_calc ORDER BY 1"
         }
       ]
     },
@@ -138,15 +138,15 @@
     },
     {
       "id": 7,
-      "title": "On-Balance Volume (OBV)",
+      "title": "Average True Range (ATR)",
       "type": "timeseries",
       "gridPos": { "h": 7, "w": 12, "x": 0, "y": 35 },
       "datasource": { "type": "postgres", "uid": "nepse-postgres" },
       "targets": [
         {
-          "refId": "OBV",
+          "refId": "ATR",
           "format": "table",
-          "rawSql": "WITH obv_calc AS (SELECT issue_date, volume, close_price, LAG(close_price) OVER (ORDER BY issue_date) as prev_close FROM nepse.stock_price_history WHERE symbol = '$symbol' AND issue_date >= '2025-01-01') SELECT issue_date as time, SUM(CASE WHEN close_price > prev_close THEN volume WHEN close_price < prev_close THEN -volume ELSE 0 END) OVER (ORDER BY issue_date) as obv FROM obv_calc ORDER BY 1"
+          "rawSql": "WITH tr AS (SELECT issue_date, GREATEST(high_price - low_price, ABS(high_price - LAG(close_price) OVER (ORDER BY issue_date)), ABS(low_price - LAG(close_price) OVER (ORDER BY issue_date))) as true_range FROM nepse.stock_price_history WHERE symbol = '$symbol' AND issue_date >= '2025-01-01') SELECT issue_date as time, AVG(true_range) OVER(ORDER BY issue_date ROWS 13 PRECEDING) as atr FROM tr ORDER BY 1"
         }
       ]
     },
@@ -167,23 +167,45 @@
     },
     {
       "id": 9,
-      "title": "Average True Range (ATR)",
+      "title": "Model Forecast Accuracy (Actual vs Predicted)",
       "type": "timeseries",
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 42 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 42 },
       "datasource": { "type": "postgres", "uid": "nepse-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "showPoints": "auto" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "actual_close" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "white" } },
+              { "id": "custom.lineWidth", "value": 2 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "predicted_close" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } },
+              { "id": "custom.lineStyle", "value": { "dash": [5, 5] } },
+              { "id": "displayName", "value": "Predicted (ML Model)" }
+            ]
+          }
+        ]
+      },
       "targets": [
         {
-          "refId": "ATR",
+          "refId": "Forecast",
           "format": "table",
-          "rawSql": "WITH tr AS (SELECT issue_date, GREATEST(high_price - low_price, ABS(high_price - LAG(close_price) OVER (ORDER BY issue_date)), ABS(low_price - LAG(close_price) OVER (ORDER BY issue_date))) as true_range FROM nepse.stock_price_history WHERE symbol = '$symbol' AND issue_date >= '2025-01-01') SELECT issue_date as time, AVG(true_range) OVER(ORDER BY issue_date ROWS 13 PRECEDING) as atr FROM tr ORDER BY 1"
+          "rawSql": "SELECT forecast_date as time, actual_close, predicted_close FROM nepse.stock_forecast WHERE symbol = '$symbol' AND forecast_date >= '2025-01-01' ORDER BY 1"
         }
       ]
     },
     {
       "id": 10,
-      "title": "Sector Performance Analysis",
+      "title": "Sector Performance Comparison",
       "type": "barchart",
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 42 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 42 },
       "datasource": { "type": "postgres", "uid": "nepse-postgres" },
       "targets": [
         {
